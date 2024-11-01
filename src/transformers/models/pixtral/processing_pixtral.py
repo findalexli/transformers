@@ -216,7 +216,7 @@ class PixtralProcessor(ProcessorMixin):
                 raise ValueError(
                     "Invalid input images. Please provide a single image, a list of images, or a list of lists of images."
                 )
-            images = [[load_image(im) for im in sample] for sample in images]
+            # images = [[load_image(im) for im in sample] for sample in images]
             image_inputs = self.image_processor(images, patch_size=self.patch_size, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}

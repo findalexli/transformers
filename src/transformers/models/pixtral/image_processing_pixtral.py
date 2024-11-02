@@ -17,7 +17,7 @@
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-
+import torch
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     resize,
@@ -38,6 +38,8 @@ from ...image_utils import (
 )
 from ...utils import TensorType, is_torch_device, is_torch_dtype, is_torch_tensor, is_vision_available, logging
 from ...utils.import_utils import requires_backends
+from ...image_tensor_processor import BaseImageTensorProcessor
+from ...image_tensor_utils import BatchTensorFeature
 
 
 logger = logging.get_logger(__name__)
@@ -466,6 +468,9 @@ class PixtralImageProcessor(BaseImageProcessor):
             resample=resample,
         )
 
+        print("==============================================================")
+        print(f"All Transformation arguments {do_resize, do_rescale, do_normalize, size, patch_size}")
+
         if do_convert_rgb:
             images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
 
@@ -484,11 +489,13 @@ class PixtralImageProcessor(BaseImageProcessor):
 
         batch_images = []
         batch_image_sizes = []
+        do_resize = False
         for sample_images in images_list:
             images = []
             image_sizes = []
             for image in sample_images:
                 if do_resize:
+                    print(image.shape)
                     image = self.resize(
                         image=image,
                         size=size,
@@ -496,8 +503,11 @@ class PixtralImageProcessor(BaseImageProcessor):
                         resample=resample,
                         input_data_format=input_data_format,
                     )
+                    print(image.shape)
+                    print(type(image))
 
                 if do_rescale:
+
                     image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
                 if do_normalize:
@@ -518,3 +528,99 @@ class PixtralImageProcessor(BaseImageProcessor):
         # Convert to tensor type outside of BatchFeature to avoid batching the images of different sizes
         images_list = [[convert_to_tensor(image, return_tensors) for image in images] for images in images_list]
         return BatchMixFeature(data={"pixel_values": images_list, "image_sizes": batch_image_sizes}, tensor_type=None)
+
+
+class PixtralImageTensorProcessor(BaseImageTensorProcessor):
+    """
+    Tensor-based image processor for Pixtral model.
+    """
+    model_input_names = ["pixel_values"]
+
+    def __init__(
+        self,
+        do_resize: bool = True,
+        size: Dict[str, int] = None,
+        patch_size: Dict[str, int] = None,
+        do_rescale: bool = True,
+        rescale_factor: float = 1/255,
+        do_normalize: bool = True,
+        image_mean: Optional[List[float]] = None,
+        image_std: Optional[List[float]] = None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.do_resize = do_resize
+        self.size = size or {"longest_edge": 1024}
+        self.patch_size = patch_size or {"height": 16, "width": 16}
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean or [0.48145466, 0.4578275, 0.40821073]
+        self.image_std = image_std or [0.26862954, 0.26130258, 0.27577711]
+
+    def preprocess(
+        self,
+        images: Union[torch.Tensor, List[torch.Tensor]],
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
+        patch_size: Optional[Dict[str, int]] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[List[float]] = None,
+        image_std: Optional[List[float]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[ChannelDimension] = None,
+        **kwargs,
+    ) -> BatchTensorFeature:
+        """
+        Preprocess images maintaining tensor format throughout.
+        """
+        do_resize = do_resize if do_resize is not None else self.do_resize
+        size = size if size is not None else self.size
+        patch_size = patch_size if patch_size is not None else self.patch_size
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
+
+        if not isinstance(images, list):
+            images = [images]
+
+        if input_data_format is None:
+            input_data_format = ChannelDimension.FIRST if images[0].shape[0] == 3 else ChannelDimension.LAST
+
+        processed_images = []
+        image_sizes = []
+        
+        for image in images:
+            if do_resize:
+                image = self.resize_tensor(
+                    image,
+                    size=(size["height"], size["width"]) if "height" in size else (size["longest_edge"], size["longest_edge"]),
+                    input_data_format=input_data_format
+                )
+
+            if do_rescale:
+                image = self.rescale_tensor(image, scale=rescale_factor)
+
+            if do_normalize:
+                image = self.normalize_tensor(
+                    image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format
+                )
+
+            if data_format != input_data_format:
+                image = to_tensor_channel_dimension(image, data_format, input_data_format)
+
+            processed_images.append(image)
+            image_sizes.append(get_tensor_size(image, data_format))
+
+        return BatchTensorFeature(
+            data={"pixel_values": processed_images, "image_sizes": image_sizes},
+            tensor_type=return_tensors
+        )

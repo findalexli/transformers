@@ -23,7 +23,7 @@ from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_device, is_torch_dtype, is_torch_tensor, logging, requires_backends
-
+from .image_processing_pixtral import PixtralImageProcessor
 
 logger = logging.get_logger(__name__)
 
@@ -217,7 +217,19 @@ class PixtralProcessor(ProcessorMixin):
                     "Invalid input images. Please provide a single image, a list of images, or a list of lists of images."
                 )
             # images = [[load_image(im) for im in sample] for sample in images]
-            image_inputs = self.image_processor(images, patch_size=self.patch_size, **output_kwargs["images_kwargs"])
+            self.image_processor = PixtralImageProcessor(
+                do_resize=True,
+                do_rescale=False,
+                size={"longest_edge": 1024},  # Resize longest edge to 256 pixels
+                do_normalize=True,
+                input_data_format = "channels_last",
+                data_format = "channels_first",
+                image_mean = [0.48145466,0.4578275,0.40821073],
+                image_std = [0.26862954,0.26130258, 0.27577711],
+                rescale_factor = 0.00392156862745098,
+            )
+
+            image_inputs = self.image_processor.preprocess(images, patch_size=self.patch_size, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
 

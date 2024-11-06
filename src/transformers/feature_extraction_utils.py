@@ -76,7 +76,9 @@ class BatchFeature(UserDict):
 
     def __init__(self, data: Optional[Dict[str, Any]] = None, tensor_type: Union[None, str, TensorType] = None):
         super().__init__(data)
+        print("Inside BatchFeature")
         self.convert_to_tensors(tensor_type=tensor_type)
+
 
     def __getitem__(self, item: str) -> Union[Any]:
         """
@@ -182,14 +184,21 @@ class BatchFeature(UserDict):
                 `None`, no modification is done.
         """
         if tensor_type is None:
+
             return self
 
+        print("convert_to_tensor()")
         is_tensor, as_tensor = self._get_is_as_tensor_fns(tensor_type)
 
         # Do the tensor conversion in batch
+        print(self.items())
         for key, value in self.items():
             try:
+                print("Inside convert_to_tensors in feat.._ext.._utils.py")
                 if not is_tensor(value):
+                    print("Inside convert_to_tensors()")
+                    print(value.shape)
+                    print(value)
                     tensor = as_tensor(value)
 
                     self[key] = tensor

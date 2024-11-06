@@ -57,6 +57,105 @@ if is_torchvision_v2_available():
 elif is_torchvision_available():
     from torchvision.transforms import functional as F
 
+import numpy as np
+import torch
+import logging
+from typing import Union, Optional, Tuple
+
+logger = logging.getLogger(__name__)
+
+
+
+def infer_channel_dimension_format_tensor(
+        image: Union[np.ndarray, torch.Tensor],
+        num_channels: Optional[Union[int, Tuple[int, ...]]] = None
+) -> ChannelDimension:
+    """
+    Infers the channel dimension format of `image`.
+
+    Args:
+        image (`Union[np.ndarray, torch.Tensor]`):
+            The image to infer the channel dimension of.
+        num_channels (`int` or `Tuple[int, ...]`, *optional*, defaults to `(1, 3)`):
+            The number of channels of the image.
+
+    Returns:
+        The channel dimension of the image.
+    """
+    if not isinstance(image, (np.ndarray, torch.Tensor)):
+        raise TypeError(f"Input image must be of type np.ndarray or torch.Tensor, got {type(image)}")
+
+    # Convert tensor to numpy for shape analysis if needed
+    if isinstance(image, torch.Tensor):
+        shape = tuple(image.shape)
+    else:
+        shape = image.shape
+
+    num_channels = num_channels if num_channels is not None else (1, 3)
+    num_channels = (num_channels,) if isinstance(num_channels, int) else num_channels
+
+    if len(shape) == 3:
+        first_dim, last_dim = 0, 2
+    elif len(shape) == 4:
+        first_dim, last_dim = 1, 3
+    else:
+        raise ValueError(f"Unsupported number of image dimensions: {len(shape)}")
+
+    if shape[first_dim] in num_channels and shape[last_dim] in num_channels:
+        logger.warning(
+            f"The channel dimension is ambiguous. Got image shape {shape}. Assuming channels are the first dimension."
+        )
+        return ChannelDimension.FIRST
+    elif shape[first_dim] in num_channels:
+        return ChannelDimension.FIRST
+    elif shape[last_dim] in num_channels:
+        return ChannelDimension.LAST
+
+    raise ValueError("Unable to infer channel dimension format")
+
+
+import torch
+from typing import Union, Optional
+
+def to_tensor_channel_dimension(
+    image: torch.Tensor,
+    channel_dim: Union[ChannelDimension, str],
+    input_channel_dim: Optional[Union[ChannelDimension, str]] = None,
+) -> torch.Tensor:
+    """
+    Converts `image` to the channel dimension format specified by `channel_dim`.
+
+    Args:
+        image (`torch.Tensor`):
+            The image tensor to have its channel dimension set.
+        channel_dim (`ChannelDimension`):
+            The channel dimension format to use.
+        input_channel_dim (`ChannelDimension`, *optional*):
+            The channel dimension format of the input image. If not provided, it will be inferred from the input image.
+
+    Returns:
+        `torch.Tensor`: The image tensor with the channel dimension set to `channel_dim`.
+    """
+    if not isinstance(image, torch.Tensor):
+        raise TypeError(f"Input image must be of type torch.Tensor, got {type(image)}")
+
+    if input_channel_dim is None:
+        input_channel_dim = infer_channel_dimension_format(image)
+
+    target_channel_dim = ChannelDimension(channel_dim)
+    if input_channel_dim == target_channel_dim:
+        return image
+
+    if target_channel_dim == ChannelDimension.FIRST:
+        # For HWC to CHW
+        image = image.permute(2, 0, 1)
+    elif target_channel_dim == ChannelDimension.LAST:
+        # For CHW to HWC
+        image = image.permute(1, 2, 0)
+    else:
+        raise ValueError(f"Unsupported channel dimension format: {channel_dim}")
+
+    return image.contiguous()
 
 def to_channel_dimension_format(
     image: np.ndarray,

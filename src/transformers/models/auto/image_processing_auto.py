@@ -118,6 +118,7 @@ else:
             ("perceiver", ("PerceiverImageProcessor",)),
             ("pix2struct", ("Pix2StructImageProcessor",)),
             ("pixtral", ("PixtralImageProcessor",)),
+
             ("poolformer", ("PoolFormerImageProcessor",)),
             ("pvt", ("PvtImageProcessor",)),
             ("pvt_v2", ("PvtImageProcessor",)),
@@ -417,6 +418,7 @@ class AutoImageProcessor:
         image_processor_class = config_dict.get("image_processor_type", None)
         image_processor_auto_map = None
         if "AutoImageProcessor" in config_dict.get("auto_map", {}):
+            # print("HERE > 1")
             image_processor_auto_map = config_dict["auto_map"]["AutoImageProcessor"]
 
         # If we still don't have the image processor class, check if we're loading from a previous feature extractor config
@@ -424,13 +426,16 @@ class AutoImageProcessor:
         if image_processor_class is None and image_processor_auto_map is None:
             feature_extractor_class = config_dict.pop("feature_extractor_type", None)
             if feature_extractor_class is not None:
+                # print("HERE > 2")
                 image_processor_class = feature_extractor_class.replace("FeatureExtractor", "ImageProcessor")
             if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):
+                # print("HERE > 3")
                 feature_extractor_auto_map = config_dict["auto_map"]["AutoFeatureExtractor"]
                 image_processor_auto_map = feature_extractor_auto_map.replace("FeatureExtractor", "ImageProcessor")
 
         # If we don't find the image processor class in the image processor config, let's try the model config.
         if image_processor_class is None and image_processor_auto_map is None:
+            # print("HERE > 4")
             if not isinstance(config, PretrainedConfig):
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
@@ -438,14 +443,19 @@ class AutoImageProcessor:
             # It could be in `config.image_processor_type``
             image_processor_class = getattr(config, "image_processor_type", None)
             if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:
+                # print("HERE > 5")
                 image_processor_auto_map = config.auto_map["AutoImageProcessor"]
 
         if image_processor_class is not None:
             # Update class name to reflect the use_fast option. If class is not found, None is returned.
+            # print("HERE > 5")
             if use_fast is not None:
+                # print("HERE > 6")
                 if use_fast and not image_processor_class.endswith("Fast"):
+                    # print("HERE > 7")
                     image_processor_class += "Fast"
                 elif not use_fast and image_processor_class.endswith("Fast"):
+                    # print("HERE > 8")
                     image_processor_class = image_processor_class[:-4]
             image_processor_class = image_processor_class_from_name(image_processor_class)
 
@@ -457,6 +467,7 @@ class AutoImageProcessor:
 
         if image_processor_auto_map is not None and not isinstance(image_processor_auto_map, tuple):
             # In some configs, only the slow image processor class is stored
+            # print("HERE > 9")
             image_processor_auto_map = (image_processor_auto_map, None)
 
         if has_remote_code and trust_remote_code:
@@ -473,9 +484,13 @@ class AutoImageProcessor:
                 image_processor_class.register_for_auto_class()
             return image_processor_class.from_dict(config_dict, **kwargs)
         elif image_processor_class is not None:
+            # print("HERE > 10")
+            # print(type(image_processor_class.from_dict(config_dict, **kwargs)))
+            # print(image_processor_class.from_dict(config_dict, **kwargs))
             return image_processor_class.from_dict(config_dict, **kwargs)
         # Last try: we use the IMAGE_PROCESSOR_MAPPING.
         elif type(config) in IMAGE_PROCESSOR_MAPPING:
+            # print("HERE > 11")
             image_processor_tuple = IMAGE_PROCESSOR_MAPPING[type(config)]
 
             image_processor_class_py, image_processor_class_fast = image_processor_tuple

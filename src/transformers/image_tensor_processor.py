@@ -1,22 +1,24 @@
 from typing import Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
-from .image_pr import (
-    get_tensor_size,
-    to_tensor_channel_dimension,
-    BatchTensorFeature
-)
+# from .image_pr import (
+#     get_tensor_size,
+#     to_tensor_channel_dimension,
+#     BatchTensorFeature
+# )
+from .image_processing_base import BatchFeature, ImageProcessingMixin
 from .image_tensor_utils import ChannelDimension
 from .utils import logging
 
 logger = logging.get_logger(__name__)
 
-class BaseImageTensorProcessor:
+class BaseImageTensorProcessor(ImageProcessingMixin):
     """Base class for image processing using PyTorch tensors"""
     
     def __init__(self, **kwargs):
         self.config = kwargs
 
+    # TODO: Correct resizing logic
     def resize_tensor(
         self,
         image: torch.Tensor,

@@ -300,6 +300,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         return image_features
 
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
+        print(f"Shape of input_ids {input_ids.shape}")
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
@@ -527,9 +528,14 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
 
         # TODO: @raushan retain only the new behavior after v4.47
         elif image_features is not None:
+            # print(f"input_ids {input_ids}")
+            # print(f"image_token_index {self.config.image_token_index}")
+            # # Shape of input_ids is (batch_size, sequence_length)
+            # print(f"Shape of input_ids {input_ids.shape}")
+            # Shape of image_token_index is (1,)
+            # print(f"Shape of image_token_index {self.config.image_token_index.shape}")
             n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
             n_image_features = image_features.shape[0] * image_features.shape[1]
-
             if n_image_tokens != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"

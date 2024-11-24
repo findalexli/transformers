@@ -407,7 +407,7 @@ class ImageProcessingMixin(PushToHubMixin):
         """
         image_processor_dict = image_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
-        print(image_processor_dict)
+        # print(image_processor_dict)
         # The `size` parameter is a dict and was previously an int or tuple in feature extractors.
         # We set `size` here directly to the `image_processor_dict` so that it is converted to the appropriate
         # dict within the image processor and isn't overwritten if `size` is passed in as a kwarg.

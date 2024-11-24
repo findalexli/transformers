@@ -109,7 +109,7 @@ class BatchMixFeature(BatchFeature):
         """
         requires_backends(self, ["torch"])
         import torch  # noqa
-        print("INSIDE to() in BatchMixFeature")
+        # print("INSIDE to() in BatchMixFeature")
         new_data = {}
         device = kwargs.get("device")
         # Check if the args are a device or a dtype
@@ -125,9 +125,9 @@ class BatchMixFeature(BatchFeature):
                 # it's something else
                 raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
-        print("Here")
+        # print("Here")
         for k, v in self.items():
-            print("Inside BatchMixFeature")
+            # print("Inside BatchMixFeature")
             # check if v is a floating point
             if isinstance(v, list):
                 new_data[k] = [
@@ -141,7 +141,6 @@ class BatchMixFeature(BatchFeature):
             else:
                 new_data[k] = v
         self.data = new_data
-        print(self.data)
         return self
 
 
@@ -276,6 +275,14 @@ def convert_to_tensor(array, tensor_type: Union[str, TensorType]) -> Any:
         return array
     return as_tensor(array)
 
+def make_list(tensor):
+    # Split the tensor along the first dimension and return as a list
+
+    tensor = tensor[0]
+
+    print(tensor.shape)
+
+    return [tensor[i] for i in range(tensor.shape[0])]
 
 class PixtralImageProcessor_Org(BaseImageProcessor):
     r"""
@@ -398,7 +405,8 @@ class PixtralImageProcessor_Org(BaseImageProcessor):
             patch_size = (patch_size["height"], patch_size["width"])
         else:
             raise ValueError("patch_size must contain either 'shortest_edge' or 'height' and 'width'.")
-
+        
+        print("Shape of image", image.shape)
         output_size = get_resize_output_image_size(
             image,
             size=size,
@@ -496,6 +504,8 @@ class PixtralImageProcessor_Org(BaseImageProcessor):
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         images_list = make_list_of_images(images)
+        # print(f"Shape of images list {len(images_list)}")
+        # print(f"Shape of each image {images_list[0].shape}")
 
         if not valid_images(images_list[0]):
             raise ValueError(
@@ -514,7 +524,7 @@ class PixtralImageProcessor_Org(BaseImageProcessor):
             resample=resample,
         )
 
-        print("==============================================================")
+        # print("==============================================================")
         print(f"All Transformation arguments {do_resize, do_rescale, do_normalize,do_convert_rgb, size, patch_size}")
         if do_convert_rgb:
             images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
@@ -549,7 +559,6 @@ class PixtralImageProcessor_Org(BaseImageProcessor):
                 print(do_resize, do_rescale, do_normalize)
                 if do_resize:
                     # print(f"Shape of image before resize {image.shape}")
-                    org_image = image
                     image = self.resize(
                         image=image,
                         size=size,
@@ -574,6 +583,8 @@ class PixtralImageProcessor_Org(BaseImageProcessor):
                 # print("get_image_size",get_image_size(image, input_data_format))
                 image_sizes.append(get_image_size(image, input_data_format))
             batch_images.append(images)
+            # batch_images.append(images)
+            # batch_image_sizes.append(image_sizes)
             batch_image_sizes.append(image_sizes)
 
         images_list = [
@@ -590,16 +601,17 @@ class PixtralImageProcessor_Org(BaseImageProcessor):
         # Convert to tensor type outside of BatchFeature to avoid batching the images of different sizes
         images_list = [[convert_to_tensor(image, return_tensors)  for image in images] for images in images_list]
 
-        # #Print shape of each image
+        # # #Print shape of each image
         # print("========================")
         # for images in images_list:
         #     for image in images:
         #         # image = image.requires_grad_()
         #         print("Size of each image", image.shape)
-        #         print("Image being passed to BatchMixFeature ", image)
 
 
-        print(images_list)
+        # # print(images_list)
+        # print(f"Batch image sizes {batch_image_sizes}")
+
         return BatchMixFeature(data={"pixel_values": images_list, "image_sizes": batch_image_sizes}, tensor_type=None)
 
 # PixtralImageTensorProcessor
@@ -663,32 +675,68 @@ class PixtralImageProcessor(BaseImageTensorProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
+        # print(f"Type of input {type(images)}")
+        # print(images)
         if not isinstance(images, list):
             images = [images]
 
         images = images[0]
+        print(f"Len of images in preprocess {len(images)}")
+        print(f"Shape of images {images[0][0].shape}")
         if input_data_format is None:
             input_data_format = ChannelDimension.FIRST if images[0].shape[0] == 3 else ChannelDimension.LAST
 
         processed_images = []
         image_sizes = []
-        print("=================================")
+
+        # print(f"Patch size {patch_size}")
+        # images = make_list(images)
+
+        # for image in images:
+        #     if do_resize:
+        #         print(f"Shape of image before resize {image.shape}")
+
+
+        #         image = self.resize_tensor(
+        #             image,
+        #             size=(size["height"], size["width"]) if "height" in size else (512, 512),
+        #             input_data_format=input_data_format
+        #         )
+        #         print(f"Shape of image after resize {image.shape}")
+
+        #     if do_rescale:
+        #         image = self.rescale_tensor(image, scale=rescale_factor)
+        #         # print(f"Shape of image after rescale {image.shape}")
+
+
+        #     if do_normalize:
+        #         image = self.normalize_tensor(
+        #             image,
+        #             mean=image_mean,
+        #             std=image_std,
+        #             input_data_format=input_data_format
+        #         )
+        #         print(f"Shape of image after normalize {image.shape}")
+
+        #     processed_images.append([image])
+        #     image_sizes.append(get_tensor_size(image, data_format))
+
+        # Process one image at a time to save memory
         for image in images:
+            # Move computation to CPU if needed to save GPU memory
+            device = image.device
+            if device.type == "cuda":
+                image = image.cpu()
+
             if do_resize:
-                print(f"Shape of image before resize {image.shape}")
-
-
                 image = self.resize_tensor(
                     image,
                     size=(size["height"], size["width"]) if "height" in size else (512, 512),
                     input_data_format=input_data_format
                 )
-                print(f"Shape of image after resize {image.shape}")
 
             if do_rescale:
                 image = self.rescale_tensor(image, scale=rescale_factor)
-                print(f"Shape of image after rescale {image.shape}")
-
 
             if do_normalize:
                 image = self.normalize_tensor(
@@ -697,30 +745,19 @@ class PixtralImageProcessor(BaseImageTensorProcessor):
                     std=image_std,
                     input_data_format=input_data_format
                 )
-                print(f"Shape of image after normalize {image.shape}")
 
-
-            if data_format != input_data_format:
-                image = to_tensor_channel_dimension(image, data_format, input_data_format)
-                print(f"Shape of image after formatting {image.shape}")
-
-            # print(image)
-            print(f"Shape of image when appending to processed image {image.shape}")
-
-            processed_images.append([image])
-            print("get tensor size", get_tensor_size(image, data_format))
+            # Move back to GPU only after processing
+            image = image.to(device)
+            
+            # Store image size before any additional processing
             image_sizes.append(get_tensor_size(image, data_format))
+            
+            # Clear any intermediate tensors
+            torch.cuda.empty_cache()
+            
+            processed_images.append([image])
 
-        for images in processed_images:
-            for image in images:
-                print("SHAPE OF PROCESSED IMAGE", image.shape)
-                print("Type of tensor", image.dtype)
-                print(image)
-
-        # images_list = [[convert_to_tensor(image, return_tensors) for image in images] for images in processed_images]
-
-
-        print(processed_images)
+        
 
         return BatchMixFeature(
             data={"pixel_values": processed_images, "image_sizes": [image_sizes]},

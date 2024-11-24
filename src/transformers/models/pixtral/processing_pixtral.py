@@ -220,7 +220,7 @@ class PixtralProcessor(ProcessorMixin):
             self.image_processor = PixtralImageProcessor(
                 do_resize=True,
                 do_rescale=False,
-                size={"longest_edge": 1024},  # Resize longest edge to 256 pixels
+                size={"longest_edge": 512},  # Resize longest edge to 256 pixels
                 do_normalize=True,
                 input_data_format = "channels_last",
                 data_format = "channels_first",
@@ -238,37 +238,66 @@ class PixtralProcessor(ProcessorMixin):
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        # try to expand inputs in processing if we have the necessary parts
+                
         prompt_strings = text
+        
+        # if image_inputs.get("pixel_values") is not None:
+        #     # Replace the image token with the expanded image token sequence
+        #     images = [image_inputs["pixel_values"]] # Make it a list of lists
+        #     image_sizes = image_inputs.pop("image_sizes")
+        #     prompt_strings = []
+            
+        #     for sample_images, sample_image_sizes, sample in zip(images, image_sizes, text):
+
+        #         replace_strings = []
+        #         # First calculate the number of tokens needed for each image and put in a placeholder
+        #         for image, image_size in zip(sample_images, sample_image_sizes):
+                    
+        #             height, width = image_size
+        #             num_height_tokens = height // self.patch_size
+        #             num_width_tokens = width // self.patch_size
+        #             replace_tokens = [
+        #                 [self.image_token] * num_width_tokens + [self.image_break_token]
+        #             ] * num_height_tokens
+        #             # Flatten list
+        #             replace_tokens = [item for sublist in replace_tokens for item in sublist]
+        #             replace_tokens[-1] = self.image_end_token
+        #             replace_str = "".join(replace_tokens)
+        #             replace_strings.append(replace_str)
+        #             sample = sample.replace(self.image_token, "<placeholder>", 1)
+
+        #         while "<placeholder>" in sample:
+        #             replace_str = replace_strings.pop(0)
+        #             sample = sample.replace("<placeholder>", replace_str, 1)
+
+        #         prompt_strings.append(sample)
+
+        # text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        # return BatchMixFeature(data={**text_inputs, **image_inputs})
         if image_inputs.get("pixel_values") is not None:
-            # Replace the image token with the expanded image token sequence
+        # Calculate image tokens more efficiently
+            print("In here")
             images = image_inputs["pixel_values"]
-            image_sizes = image_inputs.pop("image_sizes")
-            prompt_strings = []
+            image_sizes = image_inputs.pop("image_sizes", None)
+            
+            if image_sizes:
+                prompt_strings = []
+                for sample_text in text:
+                    # Calculate tokens based on patch size
+                    num_patches = (512 // self.patch_size) * (512 // self.patch_size)  # Assuming square images
+                    image_tokens = [self.image_token] * num_patches
+                    image_tokens.append(self.image_end_token)
+                    
+                    # Replace image token with the correct number of tokens
+                    sample_text = sample_text.replace(self.image_token, "".join(image_tokens))
+                    prompt_strings.append(sample_text)
 
-            for sample_images, sample_image_sizes, sample in zip(images, image_sizes, text):
-                replace_strings = []
-                # First calculate the number of tokens needed for each image and put in a placeholder
-                for image, image_size in zip(sample_images, sample_image_sizes):
-                    height, width = image_size
-                    num_height_tokens = height // self.patch_size
-                    num_width_tokens = width // self.patch_size
-                    replace_tokens = [
-                        [self.image_token] * num_width_tokens + [self.image_break_token]
-                    ] * num_height_tokens
-                    # Flatten list
-                    replace_tokens = [item for sublist in replace_tokens for item in sublist]
-                    replace_tokens[-1] = self.image_end_token
-                    replace_str = "".join(replace_tokens)
-                    replace_strings.append(replace_str)
-                    sample = sample.replace(self.image_token, "<placeholder>", 1)
+        # Process text
+        text_inputs = self.tokenizer(
+            prompt_strings, 
+            **output_kwargs["text_kwargs"]
+        )
 
-                while "<placeholder>" in sample:
-                    replace_str = replace_strings.pop(0)
-                    sample = sample.replace("<placeholder>", replace_str, 1)
-                prompt_strings.append(sample)
-
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
         return BatchMixFeature(data={**text_inputs, **image_inputs})
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
